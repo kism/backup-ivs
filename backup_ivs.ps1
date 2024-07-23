@@ -102,7 +102,6 @@ function Send-PostRequest {
     Write-Debug ("[Send-PostRequest] URL: " + $url + "?access_token=<token>")
     $url = $url + "?access_token=" + $token
 
-    # $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
     $response = Invoke-RestMethod -Uri $url -Method Post -ContentType "application/json" -Body $body
 
     return $response
@@ -121,8 +120,7 @@ function Send-GetRequest {
     Write-Debug ("[Send-GetRequest] URL: " + $url + "?access_token=<token>")
     $url = $url + "?access_token=" + $token
 
-    # $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
-    $response = Invoke-RestMethod -method Get -Uri $url
+    $response = Invoke-RestMethod -Method Get -Uri $url
 
     return $response
 }
