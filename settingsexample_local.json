@@ -1,0 +1,20 @@
+{
+    "destinationfolder": "output",
+    "timeouthours": 12,
+    "shareddiveletter": "",
+    "sharedfolderpath": "",
+    "sites": [
+        {
+            "sitename": "Site Alpha",
+            "fqdn": "sitealphaivs.mycoolorg.org.au",
+            "user": "apiuser_admin",
+            "password": "hunter2"
+        },
+        {
+            "sitename": "Site Beta",
+            "fqdn": "sitebetaivs.mycoolorg.org.au",
+            "user": "apiuser_admin",
+            "password": "mycoolpassword"
+        }
+    ]
+}
