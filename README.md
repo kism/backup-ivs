@@ -4,7 +4,11 @@ Intelligent Video Solutions Video Audio Learning Tool Backup Tool
 
 ## What it does
 
-Using Powershell 5, and rsync (provided by msys2) backup all IVS VALT video system recordings.
+Backup all IVS VALT video system recordings.
+
+Windows, Using Powershell 5+, and rsync (provided by msys2)
+
+Linux, using Powershell Core, rsync, ssh (from your package manager)
 
 ## Setup
 
