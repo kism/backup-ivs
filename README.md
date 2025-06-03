@@ -10,6 +10,10 @@ Windows, Using Powershell 5+, and rsync (provided by msys2)
 
 Linux, using Powershell Core, rsync, ssh (from your package manager)
 
+## Versions Supported
+
+VALT version 6 is supported, see the other branches for older versions.
+
 ## Setup
 
 ### Setting up the IVS Appliance
@@ -24,33 +28,33 @@ In the web interface, create a new user that has access to all video files.
 2. Login to the IVS video appliance via ssh as the ivsadmin user, the default password is `@dmin51!!`. It's worth changing the password if you haven't with the `passwd` command
 3. As the user, set the authorised key
 
-    ```bash
-    mkdir ~/.ssh
-    chmod 700 ~/.ssh
-    touch ~/.ssh/authorized_keys
-    chmod 600 ~/.ssh/authorized_keys
-    ```
+   ```bash
+   mkdir ~/.ssh
+   chmod 700 ~/.ssh
+   touch ~/.ssh/authorized_keys
+   chmod 600 ~/.ssh/authorized_keys
+   ```
 
 4. Write the public key content from id_ed25519.pub into the file with your favorite terminal text editor (Use nano if you don't know how to use vim). The content should be one line starting with ssh-ed25519
 5. Install rsync
 
-    ```bash
-    sudo apt install rsync
-    ```
+   ```bash
+   sudo apt install rsync
+   ```
 
 6. Use the following command to write a new sudoers rule
 
-    ```bash
-    sudo visudo /etc/sudoers.d/rsync
-    ```
+   ```bash
+   sudo visudo /etc/sudoers.d/rsync
+   ```
 
-- Write the line:
+7. Write the line:
 
-    ```text
-    ivsadmin ALL=NOPASSWD: /usr/bin/rsync
-    ```
+   ```text
+   ivsadmin ALL=NOPASSWD: /usr/bin/rsync
+   ```
 
-- Save and exit
+8. Save and exit
 
 ### Writing settings.json
 
@@ -96,7 +100,7 @@ pacman -Sy rsync openssh
 - Use [depends.exe](https://www.dependencywalker.com/) to figure out what libs need to come from `C:\msys64\usr\bin`
   - All the dlls that you need will start with 'msys'
   - Ignore anything missing under kernel32.dll, this belongs to windows and will be just fine on any working windows system
-  - If you are lazy, you can just grab every dll when searching msys*.dll probably
+  - If you are lazy, you can just grab every dll when searching msys\*.dll probably
 
 As of 2024, my setup looks like this:
 
