@@ -38,28 +38,41 @@ param (
     [switch]$noisy
 )
 
-# --- Variables ---
+#region: Variables
 # Globals
-$authoryear = "Kieran Gee 2023 - 2024"
+$valtversionmin = @(5, 0, 0) # Minimum version of IVS VALT we support
+$valtversionmax = @(6, 999, 0) # Maximum version of IVS VALT we support
+$authoryear = "Kieran Gee 2023 - 2025"
 $global:errorlist = @()
 # valt_recording/video folder, this should never change
-$rsyncremotedir = "/usr/local/WowzaStreamingEngine/content/valt_recordings/video/"
+$rsyncremotedir = "/usr/local/valt/docker/wowza/content/records/video/"
 # Run rsync in test mode, do not actually download video files
-$rsynccommandprefix = ".\rsync\rsync.exe -rnvP --size-only -e `".\rsync\ssh.exe -i .\rsync\id_ed25519  -o StrictHostKeyChecking=no`" --rsync-path=`"sudo /usr/bin/rsync`""
-if ($production) {
-    # Download video files
-    $rsynccommandprefix = ".\rsync\rsync.exe -rvP --size-only -e `".\rsync\ssh.exe -i .\rsync\id_ed25519 -o StrictHostKeyChecking=no`"--rsync-path=`"sudo /usr/bin/rsync`""
+
+$runningonwindows = $PSVersionTable.PSVersion.Major -ge 6 -and $PSVersionTable.Platform -eq "Win32NT"
+
+$rsyncexecutable = ".\rsync\rsync.exe"
+$sshexecutable = ".\rsync\ssh.exe"
+$sshkeypath = ".\rsync\id_ed25519"
+if (! $runningonwindows) {
+    $rsyncexecutable = "rsync"
+    $sshexecutable = "ssh"
+    $sshkeypath = "~/.ssh/id_ed25519_ivs"
 }
-$valtversionmin = @(4, 0, 0) # Minimum version of IVS VALT we support
-$valtversionmax = @(5, 999, 0) # Maximum version of IVS VALT we support
+
+$rsynccommandprefix = "$rsyncexecutable -rnvP --size-only -e `"$sshexecutable -i $sshkeypath  -o StrictHostKeyChecking=no`" --rsync-path=`"sudo /usr/bin/rsync`""
+if ($production) {
+    # Actually download video files command
+    $rsynccommandprefix = "$rsyncexecutable -rvP --size-only -e `"$sshexecutable -i $sshkeypath -o StrictHostKeyChecking=no`"--rsync-path=`"sudo /usr/bin/rsync`""
+}
 
 # Builtin Powershell vars
 $ErrorActionPreference = "Stop"
 if ($noisy) {
     $DebugPreference = "Continue"
 }
+#endregion
 
-# --- Functions ---
+#region Helper Functions
 # Get the api token
 function Get-Token {
     param(
@@ -127,7 +140,6 @@ function Send-GetRequest {
     return $response
 }
 
-
 function Confirm-ValidValtVersion {
     param (
         [Parameter(Mandatory)]
@@ -182,7 +194,6 @@ function Confirm-ValidValtVersion {
         }
     }
 }
-
 
 # Mount Drive
 function New-TempMappedDrive {
@@ -278,7 +289,9 @@ function Close-Script {
     Stop-Transcript # Very important, otherwise it will log the password
     Exit $exitcode # Needed since the timeout check calls this function
 }
+#endregion
 
+#region: Get-Videos
 function Get-Videos {
     param (
         [Parameter(Mandatory)]
@@ -332,9 +345,24 @@ function Get-Videos {
             Write-Host("Created path: " + $basefolderpath) -ForegroundColor "Black" -BackgroundColor "White"
         }
 
-        # Create desired folder path for record
+        # If we have a legacy folder, skip
+        $escapedRecordName = [regex]::Escape($record.name)
+        $legacyPattern = "^$iso8601date\s\d+\s$escapedRecordName$"
+        $legacyFolders = Get-ChildItem -Path $basefolderpath -Directory | Where-Object { $_.Name -match $legacyPattern }
+        Write-Debug("Checking for legacy folders with pattern: " + $legacyPattern)
+        if ($legacyFolders.Count -gt 0) {
+            Write-Host("Found legacy folder(s), skipping record: $($record.id) $($record.name)") -ForegroundColor "Red" -BackgroundColor "Black"
+            foreach ($folder in $legacyFolders) {
+                Write-Host("Skipping old folder: $($folder.Name)") -ForegroundColor "Red" -BackgroundColor "Black"
+            }
+            continue
+        }
+
+        # We have a record that isn't legacy, continue with processing
         $recordfoldername = $iso8601date + " " + $record.id + " " + $record.name
-        $folderpath = Join-Path -Path $siteteamfolderpath -ChildPath (Join-Path -Path $year -ChildPath $recordfoldername)
+        Write-Debug ("No legacy folder found, continuing with record " + $recordfoldername)
+        # Create desired folder path for record
+        $folderpath = Join-Path -Path $basefolderpath -ChildPath $recordfoldername
 
         # Check if there already is a folder for this ID, rename it if it doesnt match the ID in the database
         # I hate this but it works, coudldnt get a shorthand version working
@@ -343,17 +371,20 @@ function Get-Videos {
             # I understand this next block is heck, but I couldn't get it running any other way
             $folderrecordnumber = $folder.Name -split " "
             $folderrecordnumber = $folderrecordnumber[1]
-            $folderrecordnumber = [int]$folderrecordnumber
-            $recordidint = [int]$record.id
+            # $folderrecordnumber = [int]$folderrecordnumber
+            # $recordidint = [int]$record.id
 
             # Do the normal logic
-            if (($folderrecordnumber -eq $recordidint) -and ($recordfoldername -ne $folder.Name)) {
-                Write-Debug($folderrecordnumber.ToString() + " and " + $recordidint.ToString())
+            if (($folderrecordnumber -eq $record.id) -and ($recordfoldername -ne $folder.Name)) {
+                Write-Debug($folderrecordnumber.ToString() + " and " + $record.id.ToString())
                 Write-Debug($recordfoldername + " and " + $folder.Name)
                 Write-Host("Rename folder: `"" + $basefolderpath + "`\" + $folder.Name + "`" to `"" + $basefolderpath + "`\" + $recordfoldername + "`"") -ForegroundColor "Black" -BackgroundColor "White"
                 Move-Item -Path (Join-Path -Path $basefolderpath -ChildPath $folder.Name) -Destination (Join-Path -Path $basefolderpath -ChildPath $recordfoldername) -Force
             }
         }
+
+        Write-Debug("Desired folder path  : " + $folderpath)
+        Write-Debug("What will be created : " + (Join-Path -Path $basefolderpath -ChildPath $recordfoldername))
 
         # Create path if it doesnt exist, doesnt rely on the rename logic since I might remove it
         if (!(Test-Path -Path $folderpath -PathType Container)) {
@@ -423,7 +454,7 @@ function Get-Videos {
     }
     Write-Host("Done with site: " + $site.sitename)
 }
-
+#endregion
 
 # "Main"
 function Start-ProcessingSites {
@@ -431,11 +462,9 @@ function Start-ProcessingSites {
     $out = $config.outputpath
 
     foreach ($site in $sites) {
-
         Write-Host("================================================================================")
         Write-Host("Site: " + $site.sitename)
         Write-Host("Server: " + $site.fqdn)
-
         # Create folder for site
         $sitefolderpath = Join-Path -Path $out -ChildPath $site.sitename
         if (!(Test-Path -Path $sitefolderpath -PathType Container)) {
@@ -451,13 +480,13 @@ function Start-ProcessingSites {
             # Get token for this user (users are per site), each user has access to one groups data
             $token = Get-Token -username $site.user -pw $site.password -fqdn $site.fqdn
             Write-Host("Got Token!")
-
             Confirm-ValidValtVersion $site.fqdn $token
-
             # Records
             $url = "http://" + $site.fqdn + "/api/v3/records"
             $responserecords = Send-PostRequest -url $url -token $token
             Write-Host("Got List of recordings!")
+            # Write-Host($responserecords.data.records | Format-Table | Out-String)
+
             # Users
             $url = "http://" + $site.fqdn + "/api/v3/admin/users"
             $responseusers = Send-GetRequest -url $url -token $token
@@ -480,8 +509,9 @@ function Start-ProcessingSites {
         }
     }
 }
+#endregion
 
-# --- Start ---
+#region Start
 # Log Output
 try { Stop-Transcript } catch {} # Only useful when running adhoc and you had to ctrl-c it, will hang otherwises
 while ($true) {
@@ -534,5 +564,5 @@ catch {
     $global:errorlist += "Unhandled error in Start-ProcessingSites: " + $_
 }
 
-# --- Finish Up ---
 Close-Script
+#endregion
