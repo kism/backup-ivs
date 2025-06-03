@@ -50,6 +50,8 @@ if ($production) {
     # Download video files
     $rsynccommandprefix = ".\rsync\rsync.exe -rvP --size-only -e `".\rsync\ssh.exe -i .\rsync\id_ed25519 -o StrictHostKeyChecking=no`"--rsync-path=`"sudo /usr/bin/rsync`""
 }
+$valtversionmin = @(4, 0, 0) # Minimum version of IVS VALT we support
+$valtversionmax = @(5, 999, 0) # Maximum version of IVS VALT we support
 
 # Builtin Powershell vars
 $ErrorActionPreference = "Stop"
@@ -124,6 +126,63 @@ function Send-GetRequest {
 
     return $response
 }
+
+
+function Confirm-ValidValtVersion {
+    param (
+        [Parameter(Mandatory)]
+        [string]$fqdn,
+
+        [Parameter(Mandatory)]
+        [string]$token
+    )
+
+    $url = "http://" + $fqdn + "/api/v3/admin/general"
+    $response = Send-GetRequest -url $url -token $token # We don't need a token for this endpoint
+
+    Write-Host ("VALT Version: " + $response.data.version)
+
+    # Split the version string into an array of integers
+    $versionbeforespace = $response.data.version -split ' '
+    if ($versionbeforespace.Count -gt 1) {
+        # If there is a space, we only want the first part
+        $version = $versionbeforespace[0]
+    }
+    else {
+        $version = $response.data.version
+    }
+
+    $versionParts = $version -split '\.'
+    $versionArray = @()
+    foreach ($part in $versionParts) {
+        $versionArray += [int]$part
+    }
+
+    $spiel = "check for other versions of this script, or upgrade your VALT appliance."
+    # Check that we are above the minimum version
+    foreach ($i in 0..($valtversionmin.Count - 1)) {
+        if ($versionArray[$i] -lt $valtversionmin[$i]) {
+            $spiel = ("VALT Version: " + $version + " is below the min version: " + ($valtversionmin -join '.'))
+            Write-Host ($spiel)
+            throw $spiel
+        }
+        elseif ($versionArray[$i] -gt $valtversionmin[$i]) {
+            break
+        }
+    }
+    # Check that we are below the maximum version
+    foreach ($i in 0..($valtversionmax.Count - 1)) {
+        if ($versionArray[$i] -gt $valtversionmax[$i]) {
+            $spiel = ("VALT Version: " + $version + " is above the max version: " + ($valtversionmax -join '.'))
+            Write-Host ($spiel)
+            throw $spiel
+        }
+        elseif ($versionArray[$i] -lt $valtversionmax[$i]) {
+            break
+        }
+    }
+}
+
 
 # Mount Drive
 function New-TempMappedDrive {
@@ -365,15 +424,18 @@ function Get-Videos {
     Write-Host("Done with site: " + $site.sitename)
 }
 
+
 # "Main"
 function Start-ProcessingSites {
     $sites = $config.sites
     $out = $config.outputpath
 
     foreach ($site in $sites) {
+
         Write-Host("================================================================================")
         Write-Host("Site: " + $site.sitename)
         Write-Host("Server: " + $site.fqdn)
+
         # Create folder for site
         $sitefolderpath = Join-Path -Path $out -ChildPath $site.sitename
         if (!(Test-Path -Path $sitefolderpath -PathType Container)) {
@@ -389,6 +451,9 @@ function Start-ProcessingSites {
             # Get token for this user (users are per site), each user has access to one groups data
             $token = Get-Token -username $site.user -pw $site.password -fqdn $site.fqdn
             Write-Host("Got Token!")
+
+            Confirm-ValidValtVersion $site.fqdn $token
+
             # Records
             $url = "http://" + $site.fqdn + "/api/v3/records"
             $responserecords = Send-PostRequest -url $url -token $token
